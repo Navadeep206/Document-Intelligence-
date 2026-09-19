@@ -1,0 +1,144 @@
+{
+  "document": {
+    "id": "299102af-1c2b-4a23-a49a-5483cce5e98e",
+    "filename": "digital_exam.pdf",
+    "document_type": "PDF",
+    "document_role": "QUESTION_PAPER",
+    "status": "COMPLETED",
+    "page_count": 2,
+    "created_at": "2026-09-19T16:02:09"
+  },
+  "total_questions": 4,
+  "questions": [
+    {
+      "id": "cb22a44e-b4d4-4f8c-81f7-7ca79158bbd0",
+      "number": "1",
+      "text": "Which sorting algorithm guarantees an O(n log n) worst-case time complexity?",
+      "type": "MCQ",
+      "options": [
+        {
+          "label": "A",
+          "text": "Quick Sort",
+          "position": 1
+        },
+        {
+          "label": "B",
+          "text": "Merge Sort",
+          "position": 2
+        },
+        {
+          "label": "C",
+          "text": "Bubble Sort",
+          "position": 3
+        },
+        {
+          "label": "D",
+          "text": "Selection Sort",
+          "position": 4
+        }
+      ],
+      "answer": {
+        "value": "B",
+        "status": "MATCHED",
+        "confidence": 0.98,
+        "source": "ANSWER_KEY"
+      },
+      "confidence": {
+        "overall": 1.0,
+        "status": "EXTRACTED",
+        "review_required": false
+      },
+      "source_pages": [
+        1
+      ],
+      "review_issues": []
+    },
+    {
+      "id": "a4168d92-6173-4e80-969e-9a8fe024812c",
+      "number": "2",
+      "text": "What is the primary purpose of the two-phase commit (2PC) protocol in distributed databases?",
+      "type": "MCQ",
+      "options": [
+        {
+          "label": "A",
+          "text": "Consensus on replication order",
+          "position": 1
+        },
+        {
+          "label": "B",
+          "text": "Atomic transaction commitment across distributed nodes",
+          "position": 2
+        },
+        {
+          "label": "C",
+          "text": "Deadlock prevention in shared locks",
+          "position": 3
+        },
+        {
+          "label": "D",
+          "text": "Network partition detection",
+          "position": 4
+        }
+      ],
+      "answer": {
+        "value": "B",
+        "status": "MATCHED",
+        "confidence": 0.98,
+        "source": "ANSWER_KEY"
+      },
+      "confidence": {
+        "overall": 1.0,
+        "status": "EXTRACTED",
+        "review_required": false
+      },
+      "source_pages": [
+        1
+      ],
+      "review_issues": []
+    },
+    {
+      "id": "5387d3e9-4ba5-4b41-8660-f0f121c6917e",
+      "number": "3",
+      "text": "Explain Dijkstra algorithm for finding single-source shortest paths in a directed weighted graph.\nProvide the pseudocode and analyze its asymptotic complexity using a binary min-heap.",
+      "type": "LONG_ANSWER",
+      "options": [],
+      "answer": {
+        "value": "Single-source shortest path algorithm using priority queue",
+        "status": "MATCHED",
+        "confidence": 0.98,
+        "source": "ANSWER_KEY"
+      },
+      "confidence": {
+        "overall": 1.0,
+        "status": "EXTRACTED",
+        "review_required": false
+      },
+      "source_pages": [
+        1
+      ],
+      "review_issues": []
+    },
+    {
+      "id": "ff87b114-f174-4c29-8fc6-f99b5582790c",
+      "number": "4",
+      "text": "Differentiate between optimistic and pessimistic concurrency control mechanisms in database management sy",
+      "type": "LONG_ANSWER",
+      "options": [],
+      "answer": {
+        "value": "Comparison of lock-based validation vs timestamp validation",
+        "status": "MATCHED",
+        "confidence": 0.98,
+        "source": "ANSWER_KEY"
+      },
+      "confidence": {
+        "overall": 1.0,
+        "status": "EXTRACTED",
+        "review_required": false
+      },
+      "source_pages": [
+        1
+      ],
+      "review_issues": []
+    }
+  ]
+}

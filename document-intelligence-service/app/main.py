@@ -60,7 +60,10 @@ def create_application() -> FastAPI:
     # Global error handlers
     register_exception_handlers(app)
 
+    from app.api.v1.health import router as health_router
+
     # Mount API routes
+    app.include_router(health_router, prefix="/health", tags=["Health"])
     app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
     return app

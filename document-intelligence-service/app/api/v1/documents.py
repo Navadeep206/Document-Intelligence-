@@ -27,19 +27,22 @@ from app.db.models.enums import (
     DocumentRole,
     DocumentStatus,
     ProcessingJobStatus,
+    QuestionStatus,
+    QuestionType,
     RelatedDocumentType,
     ReviewSeverity,
     ReviewStatus,
 )
 from app.db.models.page import DocumentPage
 from app.db.models.processing_job import ProcessingJob
-from app.db.models.question import Question
+from app.db.models.question import Question, QuestionSource
 from app.db.models.related_document import RelatedDocument
 from app.db.models.review import ReviewItem
 from app.db.models.user import User
 from app.schemas.answer import (
     AnswerKeyResponse,
     AnswerKeySummaryResponse,
+    AnswerMappingListResponse,
     AnswerMappingResponse,
     DocumentAnswersResponse,
 )
@@ -78,6 +81,13 @@ router = APIRouter()
     response_model=DocumentUploadAcceptedResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Upload Document",
+    description="Securely upload, register, and queue a PDF or image document for asynchronous extraction.",
+)
+@router.post(
+    "/upload",
+    response_model=DocumentUploadAcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Upload Document (Alias)",
     description="Securely upload, register, and queue a PDF or image document for asynchronous extraction.",
 )
 async def upload_document(
@@ -210,11 +220,14 @@ def list_documents(
         .limit(page_size)
     ).all()
 
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
     return DocumentListResponse(
         items=[DocumentResponse.model_validate(d) for d in docs],
         page=page,
         page_size=page_size,
         total=total,
+        total_pages=total_pages,
     )
 
 
@@ -247,7 +260,17 @@ def get_document(
             },
         )
 
-    return DocumentResponse.model_validate(doc)
+    q_count = db.scalar(
+        select(func.count()).select_from(Question).where(Question.document_id == doc.id)
+    ) or 0
+    r_count = db.scalar(
+        select(func.count()).select_from(ReviewItem).where(ReviewItem.document_id == doc.id)
+    ) or 0
+
+    resp = DocumentResponse.model_validate(doc)
+    resp.question_count = q_count
+    resp.review_count = r_count
+    return resp
 
 
 @router.get(
@@ -298,10 +321,29 @@ def get_document_status(
             completed_at=job.completed_at,
         )
 
+    pages_processed = db.scalar(
+        select(func.count()).select_from(DocumentPage).where(DocumentPage.document_id == doc.id)
+    ) or 0
+    total_pages = doc.page_count if doc.page_count is not None and doc.page_count > 0 else (pages_processed if pages_processed > 0 else None)
+    questions_extracted = db.scalar(
+        select(func.count()).select_from(Question).where(Question.document_id == doc.id)
+    ) or 0
+    review_required = db.scalar(
+        select(func.count()).select_from(ReviewItem).where(
+            ReviewItem.document_id == doc.id,
+            ReviewItem.status == ReviewStatus.OPEN,
+        )
+    ) or 0
+
     return DocumentProcessingStatusResponse(
         document_id=doc.id,
+        status=doc.status,
         document_status=doc.status,
         page_count=doc.page_count,
+        pages_processed=pages_processed,
+        total_pages=total_pages,
+        questions_extracted=questions_extracted,
+        review_required=review_required,
         job=job_resp,
     )
 
@@ -353,12 +395,18 @@ def get_document_pages(
     response_model=QuestionListResponse,
     status_code=status.HTTP_200_OK,
     summary="Get Extracted Questions",
-    description="Retrieve all structured questions, options, and source provenance for an authorized document.",
+    description="Retrieve paginated structured questions, options, and source provenance for an authorized document with optional filtering.",
 )
 def get_document_questions(
     document_id: uuid.UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[Session, Depends(get_db)],
+    page: Annotated[int, Query(ge=1, description="Page number")] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
+    status_filter: Annotated[Optional[QuestionStatus], Query(alias="status", description="Filter by question status")] = None,
+    question_type: Annotated[Optional[QuestionType], Query(description="Filter by question type")] = None,
+    review_required: Annotated[Optional[bool], Query(description="Filter questions requiring review")] = None,
+    page_number: Annotated[Optional[int], Query(ge=1, description="Filter questions on source page")] = None,
 ) -> QuestionListResponse:
     """Retrieve structured questions with options and source page references for document owner."""
     doc = db.scalar(
@@ -377,23 +425,44 @@ def get_document_questions(
             },
         )
 
+    base_query = select(Question).where(Question.document_id == document_id)
+
+    if status_filter is not None:
+        base_query = base_query.where(Question.status == status_filter)
+    if question_type is not None:
+        base_query = base_query.where(Question.question_type == question_type)
+    if review_required is not None:
+        base_query = base_query.where(Question.review_required == review_required)
+    if page_number is not None:
+        base_query = (
+            base_query.join(Question.sources)
+            .join(DocumentPage, QuestionSource.document_page_id == DocumentPage.id)
+            .where(DocumentPage.page_number == page_number)
+        )
+
+    total = db.scalar(select(func.count()).select_from(base_query.subquery())) or 0
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
     questions = list(
         db.scalars(
-            select(Question)
-            .where(Question.document_id == document_id)
-            .options(
+            base_query.options(
                 selectinload(Question.options),
                 selectinload(Question.sources),
                 selectinload(Question.review_items),
             )
             .order_by(Question.created_at.asc(), Question.id.asc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
         ).all()
     )
 
     return QuestionListResponse(
         document_id=doc.id,
-        total=len(questions),
         items=[QuestionResponse.model_validate(q) for q in questions],
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=total_pages,
     )
 
 
@@ -646,6 +715,80 @@ def get_answer_key_summary(
         total_mappings=len(answer_key.mappings),
         matched_count=matched,
         unmatched_count=unmatched,
+    )
+
+
+@router.get(
+    "/{document_id}/answer-mappings",
+    response_model=AnswerMappingListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get Document Answer Mappings",
+    description="Retrieve paginated answer mappings with MATCHED, UNMATCHED, AMBIGUOUS status distinctions.",
+)
+def get_document_answer_mappings(
+    document_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+    page: Annotated[int, Query(ge=1, description="Page number")] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100, description="Items per page")] = 20,
+    status_filter: Annotated[Optional[str], Query(alias="status", description="Filter by match status (MATCHED, UNMATCHED)")] = None,
+) -> AnswerMappingListResponse:
+    """Retrieve answer mappings for document owner."""
+    doc = db.scalar(
+        select(Document).where(
+            Document.id == document_id,
+            Document.owner_id == current_user.id,
+        )
+    )
+    if doc is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "DOCUMENT_NOT_FOUND",
+                "message": "Document not found",
+            },
+        )
+
+    base_query = (
+        select(AnswerMapping)
+        .join(AnswerKey, AnswerMapping.answer_key_id == AnswerKey.id)
+        .where(AnswerKey.document_id == document_id)
+    )
+
+    if status_filter:
+        sf = status_filter.upper().strip()
+        if sf == "MATCHED":
+            base_query = base_query.where(AnswerMapping.question_id.is_not(None))
+        elif sf == "UNMATCHED":
+            base_query = base_query.where(AnswerMapping.question_id.is_(None))
+
+    total = db.scalar(select(func.count()).select_from(base_query.subquery())) or 0
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
+    mappings = list(
+        db.scalars(
+            base_query.order_by(AnswerMapping.created_at.asc(), AnswerMapping.id.asc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        ).all()
+    )
+
+    items = []
+    for m in mappings:
+        item = AnswerMappingResponse.model_validate(m)
+        if m.question_id is not None:
+            item.status = "MATCHED"
+        else:
+            item.status = "UNMATCHED"
+        items.append(item)
+
+    return AnswerMappingListResponse(
+        document_id=doc.id,
+        items=items,
+        page=page,
+        page_size=page_size,
+        total=total,
+        total_pages=total_pages,
     )
 
 

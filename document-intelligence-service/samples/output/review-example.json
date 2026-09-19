@@ -1,0 +1,17 @@
+{
+  "question_id": "8f91c3da-7d23-4c91-b951-e123456789ab",
+  "question_number": "3",
+  "question_text": "Select the invariant quantity under Lorentz transformation: (A) Proper time",
+  "question_type": "MCQ",
+  "status": "REVIEW_REQUIRED",
+  "confidence": 0.54,
+  "review_items": [
+    {
+      "id": "c80d4f60-1e82-483f-abff-e4993c2cba00",
+      "reason": "INCOMPLETE_OPTIONS",
+      "severity": "MEDIUM",
+      "status": "OPEN",
+      "description": "Question type is MCQ but fewer than 2 distinct options were detected in source text."
+    }
+  ]
+}

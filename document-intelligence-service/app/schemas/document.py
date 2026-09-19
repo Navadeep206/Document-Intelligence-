@@ -35,6 +35,8 @@ class DocumentResponse(BaseModel):
     file_size: int
     status: DocumentStatus
     page_count: Optional[int] = None
+    question_count: Optional[int] = 0
+    review_count: Optional[int] = 0
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
@@ -46,6 +48,7 @@ class DocumentListResponse(BaseModel):
     page: int = Field(ge=1, description="Current page index")
     page_size: int = Field(ge=1, le=100, description="Items per page")
     total: int = Field(ge=0, description="Total document count matching query")
+    total_pages: int = Field(default=1, ge=0, description="Total pages of results")
 
 
 class DocumentUploadAcceptedResponse(BaseModel):
@@ -79,8 +82,13 @@ class DocumentProcessingStatusResponse(BaseModel):
     """Real-time processing status response for polling and client progress tracking."""
 
     document_id: uuid.UUID
+    status: DocumentStatus
     document_status: DocumentStatus
     page_count: Optional[int] = None
+    pages_processed: Optional[int] = None
+    total_pages: Optional[int] = None
+    questions_extracted: Optional[int] = None
+    review_required: Optional[int] = None
     job: Optional[ProcessingJobResponse] = None
 
 

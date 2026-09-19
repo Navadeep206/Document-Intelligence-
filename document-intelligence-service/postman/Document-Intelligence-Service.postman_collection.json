@@ -1,0 +1,705 @@
+{
+	"info": {
+		"_postman_id": "8f8b5b7e-9762-42da-b0c8-97eb3d3e648f",
+		"name": "Document Intelligence & Question Extraction Service",
+		"description": "Production-grade API collection for document upload, asynchronous OCR extraction, question detection, answer key association, and human review.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000",
+			"type": "string"
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "document_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "key_document_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "question_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "review_id",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health",
+			"item": [
+				{
+					"name": "Service Liveness Probe",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						},
+						"description": "Verify that the FastAPI application is alive."
+					},
+					"response": []
+				},
+				{
+					"name": "Service Readiness Probe",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health/ready",
+							"host": ["{{base_url}}"],
+							"path": ["health", "ready"]
+						},
+						"description": "Verify connectivity to PostgreSQL and Redis infrastructure."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Register New User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status is 201 Created', function() {",
+									"    pm.response.to.have.status(201);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"evaluator@example.com\",\n  \"password\": \"EvaluationPassword123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "register"]
+						},
+						"description": "Registers a new user account."
+					},
+					"response": []
+				},
+				{
+					"name": "User Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status is 200 OK', function() {",
+									"    pm.response.to.have.status(200);",
+									"    var data = pm.response.json();",
+									"    pm.collectionVariables.set('access_token', data.access_token);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"evaluator@example.com\",\n  \"password\": \"EvaluationPassword123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "login"]
+						},
+						"description": "Authenticates user and returns JWT bearer token."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current User Profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "me"]
+						},
+						"description": "Fetches profile metadata of the currently authenticated user."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Documents",
+			"item": [
+				{
+					"name": "Upload PDF Document",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status is 202 Accepted', function() {",
+									"    pm.response.to.have.status(202);",
+									"    var data = pm.response.json();",
+									"    pm.collectionVariables.set('document_id', data.id);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "document_role",
+									"value": "QUESTION_PAPER",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents"]
+						},
+						"description": "Upload a PDF exam paper for asynchronous background processing."
+					},
+					"response": []
+				},
+				{
+					"name": "Upload Image Document",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "document_role",
+									"value": "QUESTION_PAPER",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents"]
+						},
+						"description": "Upload a JPG or PNG image question sheet."
+					},
+					"response": []
+				},
+				{
+					"name": "List User Documents",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents?page=1&page_size=20",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Retrieve paginated list of documents owned by authenticated user."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Document Details",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{document_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{document_id}}"]
+						},
+						"description": "Retrieve metadata, page counts, question count, and review count for a document."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Processing Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{document_id}}/status",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{document_id}}", "status"]
+						},
+						"description": "Check real-time processing state, page extraction counts, and job status."
+					},
+					"response": []
+				},
+				{
+					"name": "Download Original Document File",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{document_id}}/file",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{document_id}}", "file"]
+						},
+						"description": "Download the raw uploaded document binary."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Document",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{document_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{document_id}}"]
+						},
+						"description": "Permanently delete document, database records, and physical storage."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Questions",
+			"item": [
+				{
+					"name": "List Extracted Questions",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status is 200 OK', function() {",
+									"    pm.response.to.have.status(200);",
+									"    var data = pm.response.json();",
+									"    if (data.items && data.items.length > 0) {",
+									"        pm.collectionVariables.set('question_id', data.items[0].id);",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{document_id}}/questions?page=1&page_size=20",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{document_id}}", "questions"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "20"
+								},
+								{
+									"key": "status",
+									"value": "EXTRACTED",
+									"disabled": true
+								},
+								{
+									"key": "question_type",
+									"value": "MCQ",
+									"disabled": true
+								},
+								{
+									"key": "review_required",
+									"value": "false",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Retrieve paginated list of structured questions with options and source provenance."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Question Detail",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/questions/{{question_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "questions", "{{question_id}}"]
+						},
+						"description": "Retrieve detailed structured representation of a single extracted question."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Answers",
+			"item": [
+				{
+					"name": "Get Answer Key Summary",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{document_id}}/answer-key",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{document_id}}", "answer-key"]
+						},
+						"description": "Get summary metrics, matched count, and unmatched count for document answer key."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Document Answers",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{document_id}}/answers",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{document_id}}", "answers"]
+						},
+						"description": "Get all extracted answers and mapping associations for a document."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Answer Mappings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{document_id}}/answer-mappings?page=1&page_size=20",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{document_id}}", "answer-mappings"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "20"
+								},
+								{
+									"key": "status",
+									"value": "MATCHED",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Get paginated answer mappings with status breakdown (MATCHED, UNMATCHED)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Related Documents",
+			"item": [
+				{
+					"name": "Create Related Document Association",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"related_document_id\": \"{{key_document_id}}\",\n  \"relationship_type\": \"ANSWER_KEY\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{document_id}}/related",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{document_id}}", "related"]
+						},
+						"description": "Relates a Question Paper document to an Answer Key document and triggers association."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Related Documents",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{document_id}}/related",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{document_id}}", "related"]
+						},
+						"description": "Retrieve all directional document relationships for an authorized document."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Reviews",
+			"item": [
+				{
+					"name": "Get Document Review Items",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status is 200 OK', function() {",
+									"    pm.response.to.have.status(200);",
+									"    var data = pm.response.json();",
+									"    if (data.items && data.items.length > 0) {",
+									"        pm.collectionVariables.set('review_id', data.items[0].id);",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{document_id}}/reviews?page=1&page_size=20",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{document_id}}", "reviews"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "20"
+								},
+								{
+									"key": "status",
+									"value": "OPEN",
+									"disabled": true
+								},
+								{
+									"key": "severity",
+									"value": "HIGH",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Retrieve paginated review items flagged for human triage."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Question Review Items",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/questions/{{question_id}}/reviews",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "questions", "{{question_id}}", "reviews"]
+						},
+						"description": "Retrieve review items identified on a specific extracted question."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Document Review Summary",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/documents/{{document_id}}/reviews/summary",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "documents", "{{document_id}}", "reviews", "summary"]
+						},
+						"description": "Retrieve aggregated review metrics and confidence counts across a document."
+					},
+					"response": []
+				},
+				{
+					"name": "Resolve Review Item",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"RESOLVED\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/reviews/{{review_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reviews", "{{review_id}}"]
+						},
+						"description": "Update review issue status to RESOLVED, IGNORED, or OPEN."
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

@@ -101,7 +101,13 @@ def register_exception_handlers(app: FastAPI) -> None:
             status.HTTP_503_SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
         }
         code = code_map.get(exc.status_code, f"HTTP_{exc.status_code}")
-        message = str(exc.detail) if exc.detail else "An HTTP error occurred"
+
+        if isinstance(exc.detail, dict):
+            message = exc.detail.get("message", "An HTTP error occurred")
+            details = exc.detail.get("details", exc.detail.get("code", None))
+        else:
+            message = str(exc.detail) if exc.detail else "An HTTP error occurred"
+            details = None
 
         return JSONResponse(
             status_code=exc.status_code,
@@ -109,6 +115,7 @@ def register_exception_handlers(app: FastAPI) -> None:
                 error=ErrorDetail(
                     code=code,
                     message=message,
+                    details=details,
                 )
             ).model_dump(),
         )

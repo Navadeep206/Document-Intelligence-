@@ -23,8 +23,14 @@ class ReviewItemResponse(BaseModel):
     reason: str
     details: Optional[str] = None
     confidence: Optional[float] = None
+    notes: Optional[str] = None
     created_at: datetime.datetime
     resolved_at: Optional[datetime.datetime] = None
+
+    @property
+    def description(self) -> Optional[str]:
+        """Backward-compatible alias for details."""
+        return self.details
 
 
 class ReviewItemListResponse(BaseModel):

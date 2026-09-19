@@ -33,7 +33,19 @@ class AnswerMappingResponse(BaseModel):
     answer_value: str
     confidence: Optional[float] = None
     source_page: Optional[int] = None
+    status: str = "MATCHED"
     created_at: datetime.datetime
+
+
+class AnswerMappingListResponse(BaseModel):
+    """Paginated collection of answer mappings for a document."""
+
+    document_id: uuid.UUID
+    items: list[AnswerMappingResponse]
+    page: int = Field(default=1, ge=1, description="Current page number")
+    page_size: int = Field(default=20, ge=1, le=100, description="Items per page")
+    total: int = Field(default=0, ge=0, description="Total mappings")
+    total_pages: int = Field(default=1, ge=0, description="Total pages")
 
 
 class DocumentAnswersResponse(BaseModel):

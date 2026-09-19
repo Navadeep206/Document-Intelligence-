@@ -10,66 +10,167 @@ The **Document Intelligence & Question Extraction Service** is an enterprise-gra
 
 ---
 
-## 2. Conceptual End-to-End Flow
+## 2. High-Level Architecture
 
-```
-Client (Web / Mobile / API Consumer)
-  │
-  ▼
-FastAPI Application Gateway (Port 8000)
-  │
-  ├──► JWT Authentication & Verification (Argon2id / PyJWT)
-  │
-  ├──► Upload Validation Pipeline
-  │     ├── Extension whitelist (.pdf, .jpg, .jpeg, .png)
-  │     ├── MIME type inspection
-  │     ├── Magic byte integrity verification
-  │     └── Chunked streaming size check (<= 25 MB)
-  │
-  ├──► Storage Layer (LocalStorageService / Object Storage Abstraction)
-  │     └── Secure UUID naming ({uuid4}.ext) outside source package
-  │
-  ├──► PostgreSQL 16 (Relational Metadata & Audit Store)
-  │
-  └──► Redis 7 (Broker & Distributed State)
-         │
-         ▼
-       Celery Worker Farm (Scalable Task Execution - Phases 4–10)
+```mermaid
+flowchart TD
+    Client["Client / Evaluator / Browser"] --> API["FastAPI Application Gateway (Port 8000)"]
+
+    subgraph Core_Services ["FastAPI Core Services"]
+        API --> Auth["Authentication & Authorization (Argon2id + JWT)"]
+        API --> Validator["Upload Validator (Magic Bytes & MIME)"]
+        API --> Storage["Storage Service (Local Driver / Abstraction)"]
+    end
+
+    API --> DB[("PostgreSQL 16 (Relational Metadata & Audit Store)")]
+    API --> Queue[("Redis 7 (Broker & Distributed State)")]
+
+    Queue --> Worker["Celery Distributed Worker Farm"]
+
+    subgraph Processing_Pipeline ["Asynchronous Processing Pipeline"]
+        Worker --> StorageRead["Retrieve Document from Storage"]
+        StorageRead --> Pages["PDF/Image Processing (PyMuPDF)"]
+        Pages --> OCR["OCR / Text Extraction (Tesseract Engine)"]
+        OCR --> Questions["Question Detection & Extraction (MCQ, T/F, Descr)"]
+        Questions --> Answers["Answer-Key Intelligence & Association"]
+        Answers --> Confidence["Confidence Engine (8 Multi-Signal Scoring)"]
+        Confidence --> Review["Human Review Manager (Flagging & Deduplication)"]
+    end
+
+    Questions --> DB
+    Answers --> DB
+    Confidence --> DB
+    Review --> DB
 ```
 
 ---
 
-## 3. Database Architecture (Phase 2)
+## 3. Document Lifecycle & Processing Pipeline
 
-### 3.1 Entity Relationship (ER) Diagram
+```mermaid
+flowchart LR
+    Upload["1. Secure Upload"] --> Validate["2. Validate Magic Bytes"]
+    Validate --> Store["3. Store Disk ({uuid}.ext)"]
+    Store --> Queue["4. Enqueue Celery Task"]
+    Queue --> ExtractPages["5. Render / Extract Pages"]
+    ExtractPages --> OCR{"6. Native Text >= 20 chars?"}
+    OCR -- Yes --> DetectQuestions["7. Detect Questions"]
+    OCR -- No (Scanned/Image) --> RunOCR["Run Tesseract OCR"] --> DetectQuestions
+    DetectQuestions --> Structure["8. Parse Options & Boundaries"]
+    Structure --> AnswerMapping["9. Associate Answer Key"]
+    AnswerMapping --> Confidence["10. Score Confidence (8 Signals)"]
+    Confidence --> Review{"11. Score < 0.85 or Issues?"}
+    Review -- Yes --> FlagReview["Create Review Items"] --> Complete["12. COMPLETED"]
+    Review -- No --> Complete
+```
 
+---
+
+## 4. Database Architecture & Entity Relationships
+
+```mermaid
+erDiagram
+    USERS ||--o{ DOCUMENTS : owns
+    DOCUMENTS ||--o{ DOCUMENT_PAGES : contains
+    DOCUMENTS ||--o{ PROCESSING_JOBS : tracks
+    DOCUMENTS ||--o{ QUESTIONS : extracts
+    DOCUMENTS ||--o{ ANSWER_KEYS : defines
+    DOCUMENTS ||--o{ ANSWER_MAPPINGS : maps
+    DOCUMENTS ||--o{ REVIEW_ITEMS : flags
+    DOCUMENTS ||--o{ RELATED_DOCUMENTS : links
+
+    QUESTIONS ||--o{ QUESTION_OPTIONS : has
+    QUESTIONS ||--o{ QUESTION_SOURCES : references
+    QUESTIONS ||--o{ REVIEW_ITEMS : triggers
+    QUESTIONS ||--o| ANSWER_MAPPINGS : resolves
+
+    DOCUMENT_PAGES ||--o{ QUESTION_SOURCES : locates
+    ANSWER_KEYS ||--o{ ANSWER_MAPPINGS : associates
+
+    USERS {
+        uuid id PK
+        string email UK
+        string password_hash
+        boolean is_active
+        datetime created_at
+    }
+
+    DOCUMENTS {
+        uuid id PK
+        uuid user_id FK
+        string filename
+        string file_path
+        string mime_type
+        enum status
+        enum document_role
+        int page_count
+        datetime created_at
+    }
+
+    DOCUMENT_PAGES {
+        uuid id PK
+        uuid document_id FK
+        int page_number
+        text extracted_text
+        boolean is_ocr
+        float ocr_confidence
+    }
+
+    QUESTIONS {
+        uuid id PK
+        uuid document_id FK
+        string question_number
+        text question_text
+        enum question_type
+        enum status
+        float confidence_score
+        boolean review_required
+    }
+
+    QUESTION_OPTIONS {
+        uuid id PK
+        uuid question_id FK
+        string option_label
+        text option_text
+        int position
+    }
+
+    QUESTION_SOURCES {
+        uuid id PK
+        uuid question_id FK
+        uuid page_id FK
+        int page_number
+        json bounding_box
+    }
+
+    ANSWER_KEYS {
+        uuid id PK
+        uuid document_id FK
+        string exam_code
+        json raw_content
+    }
+
+    ANSWER_MAPPINGS {
+        uuid id PK
+        uuid document_id FK
+        uuid question_id FK
+        uuid answer_key_id FK
+        string answer_value
+        enum match_status
+        float confidence
+    }
+
+    REVIEW_ITEMS {
+        uuid id PK
+        uuid document_id FK
+        uuid question_id FK
+        enum reason
+        enum severity
+        enum status
+        text description
+    }
 ```
-User
- │
- │ 1:N (Owner)
- ▼
-Document ◄─────────────────────────────────────┐
- │                                             │
- ├──► DocumentPage (1:N)                       │
- │      ▲                                      │
- │      │ 1:N                                  │
- │   QuestionSource (N:M link)                 │
- │      │                                      │
- ├──► Question (1:N)                           │
- │      ├──► QuestionOption (1:N)              │
- │      ├──► QuestionSource (1:N)              │
- │      ├──► AnswerMapping (1:N, optional link)│
- │      └──► ReviewItem (1:N)                  │
- │                                             │
- ├──► ProcessingJob (1:N)                      │
- │                                             │
- ├──► AnswerKey (1:N)                          │
- │      └──► AnswerMapping (1:N)               │
- │                                             │
- ├──► ReviewItem (1:N)                         │
- │                                             │
- └──► RelatedDocument (Self-referential link) ──┘
-```
+
 
 ---
 
@@ -385,20 +486,59 @@ $$\text{Overall Confidence} = \sum_{i=1}^8 (\text{Signal}_i \times \text{Weight}
 
 ---
 
-## 10. Docker Services Layout
+## 10. Security Architecture
 
-| Service | Base Image | Role | Port Mapping | Volume Mounts | Health Probe |
-|---|---|---|---|---|---|
-| **`postgres`** | `postgres:16-alpine` | Relational database | `5432:5432` | `postgres_data` | `pg_isready` check |
-| **`redis`** | `redis:7-alpine` | Broker and result store | `6379:6379` | `redis_data` | `redis-cli ping` |
-| **`api`** | `python:3.12-slim` | FastAPI REST web server | `8000:8000` | `uploads_data` | HTTP `/api/v1/health` |
-| **`worker`** | `python:3.12-slim` | Celery asynchronous worker | N/A | `uploads_data` | Celery inspect ping / process probe |
+### 10.1 Authentication & Password Hashing
+- User credentials authenticated via Argon2id hashing algorithms resistant to GPU cracking.
+- Cryptographically signed JWT bearer tokens with 30-minute expiration.
+- Constant-time dummy verification routines mitigate timing-based account enumeration.
+
+### 10.2 Tenant Isolation & Authorization
+- Strict owner verification (`Document.owner_id == current_user.id`) enforced on all database queries.
+- Unowned document, question, or review access attempts return `HTTP 404 Not Found` rather than `403 Forbidden` to prevent ID enumeration.
+
+### 10.3 Ingestion Security & Storage Isolation
+- Multi-layer file validation: extension whitelist (`.pdf`, `.jpg`, `.jpeg`, `.png`), MIME verification, and magic byte signatures (`%PDF-`, `\x89PNG`, `\xFF\xD8\xFF`).
+- Streaming size cap: 25 MB max upload enforced with chunked transfer abort.
+- Path traversal prevention: filenames sanitized via `Path.name`.
+- Filesystem segregation: randomized UUID storage keys (`{uuid4}.ext`) outside the application source tree.
 
 ---
 
-## 11. Roadmap to Phases 9–10
+## 11. Scalability & Operational Model
 
-* **Phase 9**: Human-in-the-Loop Review Dashboard APIs & Collaboration.
-* **Phase 10**: Production Hardening, Observability, Rate Limiting, and Performance Optimization.
+### 11.1 Horizontal Worker Scaling
+- Stateless Celery workers consume tasks from Redis priority queues.
+- Worker concurrency tuned via `CELERY_WORKER_CONCURRENCY` (default: 2 per node).
+- Zero in-memory state shared across workers; all progress persisted transactionally to PostgreSQL.
+
+### 11.2 Connection Pooling & Resource Constraints
+- SQLAlchemy connection pool with `pool_size=10`, `max_overflow=20`, `pool_pre_ping=True`, and 30-minute recycle to avoid connection leaks.
+- Memory-efficient streaming file uploads prevent memory spikes during concurrent uploads.
+
+---
+
+## 12. Failure Handling & Resilience
+
+### 12.1 Celery Task Retry Matrix
+- Network or OCR failures trigger exponential backoff retries (`CELERY_TASK_MAX_RETRIES=3`, backoff factor 5s).
+- Pre-flight storage verification: if the physical file is deleted or missing, the task fails fast without wasting retry attempts.
+- Retry exhaustion cleanly transitions `ProcessingJob` and `Document` to `FAILED` with sanitized error messages.
+
+### 12.2 Database Transaction Safety
+- Atomic transactions: if database persistence fails during upload, the physical storage file is automatically deleted.
+- Unhandled HTTP exceptions return sanitized `HTTP 500` without exposing stack traces, credentials, or internal paths.
+
+---
+
+## 13. Architectural Trade-Offs
+
+Detailed engineering trade-off analysis is documented in [trade-offs.md](file:///Users/navadeepguduru/PNBC/document-intelligence-service/docs/trade-offs.md):
+- **Tesseract OCR vs. Cloud Vision APIs**: Local privacy, zero per-page fees, and offline evaluation vs. cloud accuracy.
+- **Asynchronous Celery vs. Synchronous**: Sub-50ms API latency and worker elasticity vs. monolith simplicity.
+- **PostgreSQL vs. Document Stores**: Strict cascades, foreign keys, and relational auditability vs. schemaless flexibility.
+- **Deterministic vs. Semantic Matching**: Zero hallucination and explicit uncertainty flags vs. aggressive heuristic guessing.
+- **Storage Abstraction vs. Direct S3**: Immediate zero-config local evaluation with production S3 drop-in readiness.
+
 
 

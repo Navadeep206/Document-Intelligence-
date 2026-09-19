@@ -57,8 +57,11 @@ class QuestionResponse(BaseModel):
 
 
 class QuestionListResponse(BaseModel):
-    """List of questions extracted from a document."""
+    """Paginated collection of questions extracted from a document."""
 
     document_id: uuid.UUID
-    total: int
     items: list[QuestionResponse]
+    page: int = Field(default=1, ge=1, description="Current page number")
+    page_size: int = Field(default=20, ge=1, le=100, description="Items per page")
+    total: int = Field(default=0, ge=0, description="Total questions matching query")
+    total_pages: int = Field(default=1, ge=0, description="Total pages of questions")
