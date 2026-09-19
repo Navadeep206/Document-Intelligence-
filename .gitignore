@@ -1,0 +1,33 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS / Editor files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables & virtual environments
+.env
+.venv
+venv/
+env/
+
+# Test & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs & Docker data
+*.log
+data/
+docker_data/
+*.rdb
+dump.rdb
+
+# Uploads
+storage/uploads/*
+!storage/uploads/.gitkeep
